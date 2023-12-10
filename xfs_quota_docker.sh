@@ -21,12 +21,24 @@ result=()
 # Start netcat to serve metrics on port 9101
 while true; do
   # Initialize variable to store all metrics
-  all_metrics=""
+  all_metrics_used="# HELP xfs_quota_used_bytes Number of used bytes of the docker volumes\n# TYPE xfs_quota_used_bytes gauge\n"
+  all_metrics_soft_limit="# HELP xfs_quota_soft_limit_bytes The soft limit of the docker volumes\n# TYPE xfs_quota_soft_limit_bytes gauge\n"
+  all_metrics_hard_limit="# HELP xfs_quota_hard_limit_bytes The hard limit of the docker volumes\n# TYPE xfs_quota_hard_limit_bytes gauge\n"
+  xfs_quota_used_sum=0
+  xfs_quota_soft_limit_sum=0
+  xfs_quota_hard_limit_sum=0
+  xfs_quota_used_count=0
+  xfs_quota_soft_limit_count=0
+  xfs_quota_hard_limit_count=0
 
   for volume in "${volumes[@]}"; do
     # Extract project ID using lsattr
     volume_path="/var/lib/docker/165536.165536/volumes/${volume}"
     projectid_lsattr=$(lsattr -p "$volume_path" | awk '/\/_data/ {gsub(/[^0-9]/, "", $1); print $1}')
+
+    if [[ $projectid_lsattr -eq 0 ]]; then
+      continue
+    fi
 
     # Find the corresponding quota information
     quota_info="${quota_array[$projectid_lsattr]}"
@@ -37,11 +49,19 @@ while true; do
     hard_limit=$(( $(echo "$quota_info" | awk '{print $3}')*1024 ))
   
     # Print metrics in Prometheus format
-    all_metrics+="xfs_quota_used_bytes{volume=\"$volume\"} ${used}\n"
-    all_metrics+="xfs_quota_soft_bytes{volume=\"$volume\"} ${soft_limit}\n"
-    all_metrics+="xfs_quota_hard_bytes{volume=\"$volume\"} ${hard_limit}\n"
+    all_metrics_used+="xfs_quota_used_bytes{volume=\"$volume\",pid=\"$projectid_lsattr\"} ${used}\n"
+    all_metrics_soft_limit+="xfs_quota_soft_limit_bytes{volume=\"$volume\",pid=\"$projectid_lsattr\"} ${soft_limit}\n"
+    all_metrics_hard_limit+="xfs_quota_hard_limit_bytes{volume=\"$volume\",pid=\"$projectid_lsattr\"} ${hard_limit}\n"
+
+    xfs_quota_used_count=$(( xfs_quota_used_count + 1 ))
+    xfs_quota_soft_limit_count=$(( xfs_quota_soft_limit_count + 1 ))
+    xfs_quota_hard_limit_count=$(( xfs_quota_hard_limit_count + 1 ))
   done
 
+  all_metrics_used+="xfs_quota_used_count ${xfs_quota_used_count}"
+  all_metrics_soft_limit+="xfs_quota_soft_limit_count ${xfs_quota_soft_limit_count}"
+  all_metrics_hard_limit+="xfs_quota_hard_limit_count ${xfs_quota_hard_limit_count}"
+
   # Print metrics in Prometheus format
-  echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n${all_metrics}" | nc -l -p 9101 -q 1
+  echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n${all_metrics_used}\n${all_metrics_soft_limit}\n${all_metrics_hard_limit}" | nc -l -p 9101 -q 1
 done
