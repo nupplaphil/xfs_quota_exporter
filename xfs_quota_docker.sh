@@ -3,23 +3,21 @@ set -eo pipefail
 
 IFS=$'\n'
 
-# Get the list of volumes
-volumes=( $( docker volume ls | tr -s " " | tail -n +2 | grep -w 'local' | awk '{print $2}') )
+# Start netcat to serve metrics on port 9101
+while true; do
+  # Get the list of volumes
+  volumes=( $( docker volume ls | tr -s " " | tail -n +2 | grep -w 'local' | awk '{print $2}') )
 
-# Initialize an associative array to store quota information
-declare -A quota_array
+  # Initialize an associative array to store quota information
+  declare -A quota_array
 
-# Populate quota_array with project ID and quota information
-while read -r line; do
+  # Populate quota_array with project ID and quota information
+  while read -r line; do
     project_id=$(echo "$line" | awk '{print substr($1,2)}')
     quota_info=$(echo "$line" | cut -d ' ' -f 2-)
     quota_array["$project_id"]="$quota_info"
-done < <(xfs_quota -x -c 'report -N' /var/lib/docker | sed -n '/^$/{:a;n;p;ba}' | sed '/^$/d' | tr -s " ")
+  done < <(xfs_quota -x -c 'report -N' /var/lib/docker | sed -n '/^$/{:a;n;p;ba}' | sed '/^$/d' | tr -s " ")
 
-result=()
-
-# Start netcat to serve metrics on port 9101
-while true; do
   # Initialize variable to store all metrics
   all_metrics_used="# HELP xfs_quota_used_bytes Number of used bytes of the docker volumes\n# TYPE xfs_quota_used_bytes gauge\n"
   all_metrics_soft_limit="# HELP xfs_quota_soft_limit_bytes The soft limit of the docker volumes\n# TYPE xfs_quota_soft_limit_bytes gauge\n"
