@@ -32,7 +32,7 @@ while true; do
   for volume in "${volumes[@]}"; do
     # Extract project ID using lsattr
     volume_path="/var/lib/docker/165536.165536/volumes/${volume}"
-    projectid_lsattr=$(lsattr -p "$volume_path" | awk '/\/_data/ {gsub(/[^0-9]/, "", $1); print $1}')
+    projectid_lsattr=$(lsattr -p "$volume_path" | awk '/\/_data/ {gsub(/[^0-9]/, "", $1); print $1}') || continue
 
     if [[ $projectid_lsattr -eq 0 ]]; then
       continue
